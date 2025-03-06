@@ -1,3 +1,4 @@
+
 Vue.component('product', {
     props: {
         premium: {
@@ -6,37 +7,31 @@ Vue.component('product', {
         }
     },
     template: `
-<div class="product">
-    <div class="product-image">
-    <img :src="image" :alt="altText"/>
+    <div class="product">
+        <div class="product-image">
+            <img :src="image" :alt="altText"/>
+        </div>
+        <div class="product-info">
+            <h1>{{ title }}</h1>
+            <p v-if="inStock">In stock</p>
+            <p v-else :class="{ 'line-through': !inStock }">Out of Stock</p>
+            <ul>
+                <p style="font-size: 20px">Состав</p>
+                <product-details></product-details>
+            </ul>
+            <p>Shipping: {{ shipping }}</p>
+            <div v-for="(variant, index) in variants" :key="variant.variantId"
+                 class="variant" :style="{ backgroundColor: variant.variantColor }" @mouseover="updateProduct(index)">
+            </div>
+            <ul>
+                <li v-for="size in sizes" >{{ size }}</li>
+            </ul>
+            <button @click="addToCart" :disabled="!inStock" :class="{ disabledButton: !inStock }">Add to cart</button>
+            <button @click="decreaseCart" :disabled="!inStock" :class="{ disabledButton: !inStock }">Delete</button>
+        </div>
+        <product-tabs :reviews="reviews" :shipping="shipping" :details="details"></product-tabs>
     </div>
-<div class="product-info">
-    <h1>{{ title }}</h1>
-    <p v-if="inStock">In stock</p>
-    <p v-else>Out of Stock</p>
-<ul>
-    <p style="font-size: 20px">Состав</p>
-    <product-details></product-details>
-</ul>
-
-<p>User is premium: {{ premium }}</p>
-<p>Shipping: {{ shipping }}</p>
-<div v-for="(variant, index) in variants" :key="variant.variantId"
-class="variant" :style="{ backgroundColor: variant.variantColor }" @mouseover="updateProduct(index)">
-    </div>
-<ul>
-    <li v-for="size in sizes" >{{ size }}</li>
-</ul>
-
-            <button v-on:click="addToCart" :disabled="!inStock"
-                    :class="{ disabledButton: !inStock }">Add to cart</button>
-            <button v-on:click="decreaseCart" :disabled="!inStock"
-                    :class="{ disabledButton: !inStock }">Delete</button>
-                  
-  </div>
-        <product-tabs :reviews="reviews"></product-tabs>
-    </div>
-`,
+    `,
     data() {
         return {
             product: "Socks",
@@ -61,54 +56,56 @@ class="variant" :style="{ backgroundColor: variant.variantColor }" @mouseover="u
             ],
             sizes: ['S', 'M', 'L', 'XL', 'XXL', 'XXXL'],
             cart: 0,
-            updateProduct(index) {
-                this.selectedVariant = index;
-                console.log(index);
-
-
-            },
-            reviews: [],
+            // Загрузка из localStorage
+            reviews: JSON.parse(localStorage.getItem('productReviews') || '[]')
         }
     },
     methods: {
         addToCart() {
-            this.$emit('add-to-cart',
-                this.variants[this.selectedVariant].variantId);
+            this.$emit('add-to-cart', this.variants[this.selectedVariant].variantId);
         },
         decreaseCart() {
-            this.$emit('delete-to-cart',
-                this.variants[this.selectedVariant].variantId);
+            this.$emit('delete-to-cart', this.variants[this.selectedVariant].variantId);
         },
         addReview(productReview) {
-            this.reviews.push(productReview)
+            this.reviews.push(productReview);
+            this.saveReviewsToStorage();
+        },
+        saveReviewsToStorage() {
+            localStorage.setItem('productReviews', JSON.stringify(this.reviews));
+        },
+        updateProduct(index) {
+            this.selectedVariant = index;
         }
     },
     computed: {
         title() {
-            return this.brand + ' ' + this.product + ' ' + this.onSale;
+            return `${this.brand} ${this.product} ${this.onSale}`;
         },
         image() {
             return this.variants[this.selectedVariant].variantImage;
         },
-        inStock(){
-            return this.variants[this.selectedVariant].variantQuantity
+        inStock() {
+            return this.variants[this.selectedVariant].variantQuantity > 0;
         },
         shipping() {
-            if (this.premium) {
-                return "Free";
-            } else {
-                return 2.99
+            return this.premium ? 'Free' : '2.99';
+        }
+    },
+    watch: {
+        reviews: {
+            deep: true,
+            handler() {
+                this.saveReviewsToStorage();
             }
         }
-
     }
-
-})
+});
 
 Vue.component('product-details', {
     template: `
         <ul>
-            <li v-for="detail in details" >{{ detail }}</li>
+            <li v-for="detail in details">{{ detail }}</li>
         </ul>
    `,
     data() {
@@ -116,18 +113,19 @@ Vue.component('product-details', {
             details: ['80% cotton', '20% polyester', 'Gender-neutral']
         }
     }
-})
+});
+
 Vue.component('product-review', {
     template: `
     <form class="review-form" @submit.prevent="onSubmit">
-    <p v-if="errors.length">
-      <b>Please correct the following error(s):</b>
-      <ul>
-        <li v-for="error in errors">{{ error }}</li>
-      </ul>
-    </p>
-      <p>
-        <label for="name">Name:</label>
+        <p v-if="errors.length">
+            <b>Please correct the following error(s):</b>
+            <ul>
+                <li v-for="error in errors">{{ error }}</li>
+            </ul>
+        </p>
+        <p>
+            <label for="name">Name:</label>
         <input id="name" v-model="name" placeholder="name">
       </p>
       <p>
@@ -136,18 +134,14 @@ Vue.component('product-review', {
       </p>
       <p>
          <label for="rating">Rating:</label>
-         <select id="rating" v-model.number="rating">
-            <option>5</option>
-            <option>4</option>
-            <option>3</option>
-            <option>2</option>
-            <option>1</option>
+         <select id="rating" v-model.number="rating" :disabled="isRatingDisabled">
+            <option v-for="num in availableRatings" :key="num">{{ num }}</option>
          </select>
       </p>
-      <label for="recommend" >Would you recommend this product?</label><br>
-             <input type="radio" id="yes" name="recommend" value="yes">
+             <label for="recommend" >Would you recommend this product?</label><br>
+             <input type="radio" id="yes" name="recommend" value="yes" v-model="recommend" @change="updateAvailableRatings">
              <label for="yes" >Yes</label><br>
-             <input type="radio" id="no" name="recommend" value="no">
+             <input type="radio" id="no" name="recommend" value="no" v-model="recommend" @change="updateAvailableRatings">
              <label for="no" >No</label><br>
       <p>
         <input type="submit" value="Submit">
@@ -159,13 +153,34 @@ Vue.component('product-review', {
             name: null,
             review: null,
             rating: null,
+            recommend: null,
             errors: [],
-            recommended: null,
+            availableRatings: [1, 2, 3, 4, 5]
+        }
+    },
+    computed: {
+        isRatingDisabled() {
+            return this.recommend === null; // Disable rating selection if no recommendation is made
         }
     },
     methods:{
+        updateAvailableRatings() {
+            if (this.recommend === 'yes') {
+                this.availableRatings = [3, 4, 5]; // Allow only ratings 3-5
+                if (this.rating && this.rating < 3) {
+                    this.rating = null; // Reset rating if it was invalid
+                }
+            } else if (this.recommend === 'no') {
+                this.availableRatings = [1, 2]; // Allow only ratings 1-2
+                if (this.rating && this.rating > 2) {
+                    this.rating = null; // Reset rating if it was invalid
+                }
+            } else {
+                this.availableRatings = [1, 2, 3, 4, 5]; // Allow all ratings if no recommendation is made
+            }
+        },
         onSubmit() {
-            if(this.name && this.review && this.rating && this.recommend !== null) {
+            if(this.name && this.review && this.rating !== null && this.recommend !== null) {
                 let productReview = {
                     name: this.name,
                     review: this.review,
@@ -177,15 +192,17 @@ Vue.component('product-review', {
                 this.review = null
                 this.rating = null
                 this.recommend = null
+                this.availableRatings = [1, 2, 3, 4, 5]; // Reset available ratings
             } else {
                 if(!this.name) this.errors.push("Name required.")
                 if(!this.review) this.errors.push("Review required.")
-                if(!this.rating) this.errors.push("Rating required.")
+                if(this.rating === null) this.errors.push("Rating required.")
                 if (this.recommend === null) this.errors.push("Recommendation required.")
             }
         }
     }
-})
+});
+
 Vue.component('product-tabs', {
     template: `
     <div>
@@ -209,7 +226,7 @@ Vue.component('product-tabs', {
         <product-review @review-submitted="addReview"></product-review>
       </div>
       <div v-show="selectedTab === 'Shipping'">
-        <p>Стоимость доставки: Бесплатно</p>
+        <p>Стоимость доставки: {{ shipping }}</p>
       </div>
       <div v-show="selectedTab === 'Details'">
         <ul>
@@ -244,18 +261,22 @@ Vue.component('product-tabs', {
         }
     }
 });
+
+
+
 let app = new Vue({
     el: '#app',
     data: {
         premium: true,
-        cart: [],
-        inStock:true,
+        cart: []
     },
+
     methods: {
         updateCart(id) {
             this.cart.push(id);
         },
         deleteCart() {
+
             if (this.cart.length <= 0) {
                 return this.cart.length;
             } else
@@ -263,7 +284,3 @@ let app = new Vue({
         }
     }
 })
-    `
-})
-
-`
